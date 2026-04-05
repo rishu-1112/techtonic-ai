@@ -2,7 +2,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
+import json
 import whisper
 import shutil
 from services.gemini_service import extract_tasks_with_gemini
@@ -26,7 +27,7 @@ except Exception as e:
     print(f"Failed to load Pyannote diarization pipeline: {e}")
 
 @app.post("/process")
-async def process_audio(file: UploadFile = File(...)):
+async def process_audio(file: UploadFile = File(...), users: str = Form(None)):
     file_location = f"temp_{file.filename}"
     
     try:
@@ -60,7 +61,8 @@ async def process_audio(file: UploadFile = File(...)):
             except Exception as e:
                 print(f"Diarization failed: {e}")
 
-        ai_output = extract_tasks_with_gemini(text)
+        user_list = json.loads(users) if users else []
+        ai_output = extract_tasks_with_gemini(text, user_list)
 
         return {
             "text": text,

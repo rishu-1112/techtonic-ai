@@ -119,6 +119,16 @@ app.post("/upload", requireAuth, upload.single("audio"), async (req, res) => {
         const formData = new FormData();
         formData.append("file", fs.createReadStream(filePath));
 
+        // Fetch user list and pass it to AI Service for fuzzy matching
+        try {
+            const employees = await User.find({ role: "employee" }).select("name").lean();
+            const userList = employees.map(emp => emp.name);
+            formData.append("users", JSON.stringify(userList));
+        } catch (err) {
+            console.error("Failed to fetch user list for AI processor:", err);
+            formData.append("users", JSON.stringify([]));
+        }
+
         console.log("[Upload] Calling AI service at http://127.0.0.1:8000/process");
         const response = await axios.post(
             "http://127.0.0.1:8000/process",

@@ -240,7 +240,22 @@ export const resolveConflict = async (taskId, adminId, resolutionNotes, action =
             throw new Error("Task not found");
         }
         
-        // Mark inconsistencies as resolved by admin
+        // If task is unassigned, try to assign it based on assignedToName
+        if (!task.assignedTo && task.assignedToName) {
+            const user = await User.findOne({ name: task.assignedToName });
+            if (user) {
+                task.assignedTo = user._id;
+                task.empId = user.employeeId;
+                task.assignmentStatus = "assigned";
+                
+                // Remove the "name_not_found" inconsistency if it exists
+                task.inconsistencies = task.inconsistencies.filter(
+                    inc => inc.type !== "name_not_found"
+                );
+            }
+        }
+        
+        // Mark remaining inconsistencies as resolved by admin
         task.inconsistencies.forEach(inc => {
             inc.resolved = true;
             inc.resolvedAt = new Date();

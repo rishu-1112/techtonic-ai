@@ -324,10 +324,10 @@ export default function AdminTaskDashboardWithSocket() {
     };
 
     const getFilteredData = () => {
-        if (filterMode === "conflicts") return conflicts;
+        if (filterMode === "conflicts") return conflicts.filter(t => t.inconsistencies?.filter(i => !i.resolved).length > 0);
         if (filterMode === "critical") {
             return conflicts.filter(t =>
-                t.inconsistencies.some(i => i.severity === "critical")
+                t.inconsistencies.some(i => i.severity === "critical" && !i.resolved)
             );
         }
         return tasks;
@@ -393,7 +393,7 @@ export default function AdminTaskDashboardWithSocket() {
                     </div>
                     <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
                         <p className="text-gray-500 text-sm">With Conflicts</p>
-                        <p className="text-2xl font-bold text-purple-600">{conflicts.length}</p>
+                        <p className="text-2xl font-bold text-purple-600">{conflicts.filter(t => t.inconsistencies?.filter(i => !i.resolved).length > 0).length}</p>
                     </div>
                 </div>
 
@@ -496,7 +496,7 @@ export default function AdminTaskDashboardWithSocket() {
                                 : "bg-gray-200 text-gray-900 hover:bg-gray-300"
                         }`}
                     >
-                        With Conflicts ({conflicts.length})
+                        With Conflicts ({conflicts.filter(t => t.inconsistencies?.filter(i => !i.resolved).length > 0).length})
                     </button>
                     <button
                         onClick={() => setFilterMode("critical")}
@@ -533,7 +533,7 @@ export default function AdminTaskDashboardWithSocket() {
                                                 <span className="px-3 py-1 rounded-full text-xs bg-blue-100 text-blue-800 font-semibold">
                                                     {task.status}
                                                 </span>
-                                                {task?.inconsistencies?.length > 0 && (
+                                                {task?.inconsistencies?.filter(i => !i.resolved).length > 0 && (
                                                     <span className="px-3 py-1 rounded-full text-xs bg-red-100 text-red-800 font-semibold">
                                                         {task.inconsistencies.length} conflicts
                                                     </span>
@@ -587,7 +587,7 @@ export default function AdminTaskDashboardWithSocket() {
                                     </div>
 
                                     {/* Conflicts Display */}
-                                    {task.inconsistencies && task.inconsistencies.length > 0 && (
+                                    {task.inconsistencies && task.inconsistencies.filter(i => !i.resolved).length > 0 && (
                                         <div className="mb-4 space-y-2">
                                             {task.inconsistencies.map((inc, idx) => (
                                                 <div
@@ -651,7 +651,7 @@ export default function AdminTaskDashboardWithSocket() {
             </div>
 
             {/* Conflict Resolution Modal */}
-            {selectedTask && selectedTask.inconsistencies?.length > 0 && (
+            {selectedTask && selectedTask.inconsistencies?.filter(i => !i.resolved).length > 0 && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
                         <div className="sticky top-0 bg-gray-50 border-b p-6">

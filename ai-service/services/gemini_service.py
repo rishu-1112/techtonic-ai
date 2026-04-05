@@ -1,9 +1,61 @@
 import os
 import json
+import re
 from .nlp import extract_tasks
+from difflib import get_close_matches
+
+def map_name_to_db(name, user_list):
+    if not name:
+        return name
+
+    name = name.lower()
+
+    # Normalize user list
+    user_map = {u.lower(): u for u in user_list}
+
+    # 🔥 1. Direct match
+    if name in user_map:
+        return user_map[name]
+
+    # 🔥 2. Fuzzy match
+    matches = get_close_matches(name, user_map.keys(), n=1, cutoff=0.6)
+    if matches:
+        return user_map[matches[0]]
+
+    # 🔥 3. Phonetic-like fallback (basic)
+    for u in user_map:
+        if sorted(u) == sorted(name):  # loose similarity
+            return user_map[u]
+
+    return name.title()  # fallback original
+
+def clean_task_text(task):
+    if not task:
+        return task
+
+    task = task.lower().strip()
+
+    # Remove person names at the beginning (common names)
+    task = re.sub(r'^(rishikant|priya|rahul|raj|amit|rishu|techansh|manager|employee|team|we|you|i)\s*[,:]\s*', '', task)
+
+    # Remove common fillers
+    fillers = [
+        "i need you to", "please", "you should", "kindly", "i want you to",
+        "make sure to", "can you", "could you", "would you", "will you",
+        "i need the", "we need", "they need", "the team needs",
+        "i need", "we need to", "you need to", "they need to"
+    ]
+
+    for f in fillers:
+        task = task.replace(f, "")
+
+    # Remove time references at the end if they're not part of the core task
+    task = re.sub(r'\s+(by|before|after|on|at|in)\s+(tomorrow|today|tonight|yesterday|next week|this week|eod|asap|soon|immediately|now)$', '', task)
+
+    return task.strip().capitalize()
 
 
-def extract_tasks_with_gemini(text):
+def extract_tasks_with_gemini(text, user_list=[]):
     # Try using Gemini API first if configured
     api_key = os.getenv("GEMINI_API_KEY")
     if api_key:
@@ -51,8 +103,13 @@ CRITICAL RULES:
    - Low → everything else
 
 7. CLEAN TASKS:
-   - Remove filler words ("I need", "you are on", "मुझे चाहिए", "आप हो")
-   - Keep tasks short and action-oriented
+   - Extract ONLY the core actionable task, not the full sentence
+   - Remove person names, filler words, and context
+   - Examples:
+     - "Rishikant, I need the deployment as soon as possible by tomorrow" → "deployment as soon as possible"
+     - "Priya, please prepare the report today" → "prepare the report"
+     - "Rahul, you should complete the code review" → "complete the code review"
+   - Keep tasks short and action-oriented (3-8 words max)
 
 OUTPUT FORMAT:
 Return ONLY valid JSON (even if input is Hindi or mixed):
@@ -82,6 +139,9 @@ Transcript:
             output = response.text.replace("```json", "").replace("```", "").strip()
             result = json.loads(output)
             if "tasks" in result and "summary" in result:
+                for task in result.get("tasks", []):
+                    task["assignedTo"] = map_name_to_db(task.get("assignedTo"), user_list)
+                    task["task"] = clean_task_text(task.get("task"))
                 return result
         except Exception as e:
             print(f"Gemini API fallback triggered due to error: {e}")
@@ -90,6 +150,9 @@ Transcript:
     tasks = extract_tasks(text)
     
     if tasks:
+        for task in tasks:
+            task["assignedTo"] = map_name_to_db(task.get("assignedTo"), user_list)
+            task["task"] = clean_task_text(task.get("task"))
         people = list(set([t["assignedTo"] for t in tasks if t.get("assignedTo")]))
         if people:
             summary = f"Meeting focused on delegating tasks to: {', '.join(people)}."
