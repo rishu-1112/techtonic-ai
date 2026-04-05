@@ -53,7 +53,7 @@ def extract_tasks(text):
                 
             task = {
                 "task": None,
-                "person": assigned_person,
+                "assignedTo": assigned_person,
                 "deadline": None,
                 "priority": None
             }

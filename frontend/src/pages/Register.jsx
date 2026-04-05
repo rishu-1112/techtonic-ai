@@ -6,6 +6,7 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
@@ -15,7 +16,8 @@ export default function Register() {
       const res = await axios.post("http://localhost:5000/api/auth/register", {
         name,
         email,
-        password
+        password,
+        employeeId
       });
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
@@ -58,6 +60,17 @@ export default function Register() {
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-300 font-medium mb-1">Employee ID</label>
+            <input
+              type="text"
+              required
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
             />
           </div>
 

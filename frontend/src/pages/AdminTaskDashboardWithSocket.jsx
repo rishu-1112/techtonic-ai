@@ -36,6 +36,12 @@ export default function AdminTaskDashboardWithSocket() {
     const [resolveAction, setResolveAction] = useState("resolve_only");
     const [dismissedNotifications, setDismissedNotifications] = useState(new Set());
     const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+    const [employees, setEmployees] = useState([]);
+    const [editTaskData, setEditTaskData] = useState({
+        taskName: "",
+        assignedTo: "",
+        deadline: ""
+    });
     
     // Recording & Transcription states
     const [file, setFile] = useState(null);
@@ -81,19 +87,41 @@ export default function AdminTaskDashboardWithSocket() {
     // Setup polling with pause/resume capability
     useEffect(() => {
         fetchDashboardData();
-        resumePolling(fetchDashboardData);
+        fetchEmployees();
+        if (!showAssignmentModal) {
+            resumePolling(fetchDashboardData);
+        }
         
         return () => {
             pausePolling();
         };
-    }, [resumePolling, pausePolling]);
+    }, [resumePolling, pausePolling, showAssignmentModal]);
+
+    useEffect(() => {
+        if (selectedTask) {
+            setEditTaskData({
+                taskName: selectedTask.taskName || selectedTask.task || "",
+                assignedTo: selectedTask.assignedTo?._id || "",
+                deadline: selectedTask.deadline || ""
+            });
+        }
+    }, [selectedTask]);
+
+    const fetchEmployees = async () => {
+        try {
+            const res = await api.get("/api/admin/employees");
+            setEmployees(res.data || []);
+        } catch (err) {
+            console.error("Error fetching employees:", err);
+        }
+    };
 
     const fetchDashboardData = async () => {
         try {
             setLoading(true);
             const [statsRes, tasksRes, conflictsRes] = await Promise.all([
                 api.get("/api/admin/dashboard/overview"),
-                api.get("/api/tasks?hasConflicts=true"),
+                api.get("/api/tasks"),
                 api.get("/api/admin/conflicts")
             ]);
 
@@ -109,6 +137,16 @@ export default function AdminTaskDashboardWithSocket() {
 
     const approveConflict = async (taskId) => {
         try {
+            // Update the underlying task dynamically if modified
+            if (editTaskData.taskName || editTaskData.assignedTo || editTaskData.deadline) {
+                await api.patch(`/api/tasks/${taskId}`, {
+                    taskName: editTaskData.taskName,
+                    assignedTo: editTaskData.assignedTo || undefined,
+                    deadline: editTaskData.deadline,
+                    empId: employees.find(e => e._id === editTaskData.assignedTo)?.empId
+                });
+            }
+
             await api.patch(`/api/admin/conflicts/${taskId}/approve`, {
                 resolutionNotes,
                 action: resolveAction
@@ -260,7 +298,7 @@ export default function AdminTaskDashboardWithSocket() {
             const taskData = [
                 task.taskName,
                 task.assignedTo?.name || "Unassigned",
-                new Date(task.deadline).toLocaleDateString() || "-",
+                !isNaN(new Date(task.deadline).getTime()) ? new Date(task.deadline).toLocaleDateString() : task.deadline || "-",
                 task.priority || "-",
                 task.status
             ];
@@ -490,7 +528,7 @@ export default function AdminTaskDashboardWithSocket() {
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-2">
                                                 <h3 className="text-lg font-semibold text-gray-900">
-                                                    {task.taskName}
+                                                    {task.taskName || task.task}
                                                 </h3>
                                                 <span className="px-3 py-1 rounded-full text-xs bg-blue-100 text-blue-800 font-semibold">
                                                     {task.status}
@@ -507,19 +545,29 @@ export default function AdminTaskDashboardWithSocket() {
                                         </span>
                                     </div>
 
-                                    <div className="grid grid-cols-3 md:grid-cols-5 gap-4 mb-4 text-sm">
+                                    <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-4 text-sm">
                                         <div>
                                             <p className="text-gray-500">EmpID</p>
                                             <p className="font-semibold text-gray-900">{task.empId}</p>
                                         </div>
                                         <div>
                                             <p className="text-gray-500">Assigned To</p>
-                                            <p className="font-semibold text-gray-900">{task.assignedTo?.name}</p>
+                                            <p className="font-semibold text-gray-900">
+                                                {task.assignedTo?.name || task.assignedToName || "Unassigned"}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-gray-500">Assigned By</p>
+                                            <p className="font-semibold text-gray-900">
+                                                {task.assignedBy?.name || "Unknown"}
+                                            </p>
                                         </div>
                                         <div>
                                             <p className="text-gray-500">Deadline</p>
                                             <p className="font-semibold text-gray-900">
-                                                {new Date(task.deadline).toLocaleDateString()}
+                                                {!isNaN(new Date(task.deadline).getTime()) 
+                                                    ? new Date(task.deadline).toLocaleDateString() 
+                                                    : task.deadline || "-"}
                                             </p>
                                         </div>
                                         <div>
@@ -569,12 +617,14 @@ export default function AdminTaskDashboardWithSocket() {
 
                                     {/* Action Buttons */}
                                     <div className="flex gap-3 flex-wrap">
-                                        <button
-                                            onClick={() => setSelectedTask(task)}
-                                            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
-                                        >
-                                            <CheckCircle size={16} /> Resolve & Approve
-                                        </button>
+                                        {task.inconsistencies && task.inconsistencies.length > 0 && (
+                                            <button
+                                                onClick={() => setSelectedTask(task)}
+                                                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                                            >
+                                                <CheckCircle size={16} /> Resolve & Approve
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => deleteTask(task._id)}
                                             className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
@@ -606,7 +656,7 @@ export default function AdminTaskDashboardWithSocket() {
                     <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
                         <div className="sticky top-0 bg-gray-50 border-b p-6">
                             <h2 className="text-2xl font-bold text-gray-900">Resolve Conflicts</h2>
-                            <p className="text-gray-600 text-sm mt-1">{selectedTask.taskName}</p>
+                            <p className="text-gray-600 text-sm mt-1">{selectedTask.taskName || selectedTask.task}</p>
                         </div>
 
                         <div className="p-6 space-y-4">
@@ -625,6 +675,50 @@ export default function AdminTaskDashboardWithSocket() {
                                     <p className="text-sm text-gray-700 mt-1">{inc.description}</p>
                                 </div>
                             ))}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-900 mb-1">
+                                        Corrected Task Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editTaskData.taskName}
+                                        onChange={(e) => setEditTaskData({...editTaskData, taskName: e.target.value})}
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-900 mb-1">
+                                        Corrected Deadline
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editTaskData.deadline}
+                                        onChange={(e) => setEditTaskData({...editTaskData, deadline: e.target.value})}
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                        placeholder="e.g. tomorrow, YYYY-MM-DD"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-900 mb-1">
+                                    Map to Employee
+                                </label>
+                                <select
+                                    value={editTaskData.assignedTo}
+                                    onChange={(e) => setEditTaskData({...editTaskData, assignedTo: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                >
+                                    <option value="">-- Leave Unassigned --</option>
+                                    {employees.map(emp => (
+                                        <option key={emp._id} value={emp._id}>
+                                            {emp.name} ({emp.empId}) - {emp.email}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
 
                             <div>
                                 <label className="block text-sm font-semibold text-gray-900 mb-2">

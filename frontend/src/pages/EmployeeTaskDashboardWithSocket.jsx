@@ -265,7 +265,7 @@ export default function EmployeeTaskDashboardWithSocket() {
         tasks.forEach(task => {
             const taskData = [
                 task.taskName,
-                new Date(task.deadline).toLocaleDateString() || "-",
+                !isNaN(new Date(task.deadline).getTime()) ? new Date(task.deadline).toLocaleDateString() : task.deadline || "-",
                 task.priority || "-",
                 task.status
             ];
@@ -449,7 +449,9 @@ export default function EmployeeTaskDashboardWithSocket() {
                                         <div>
                                             <p className="text-gray-500">Deadline</p>
                                             <p className="font-semibold text-gray-900">
-                                                {new Date(task.deadline).toLocaleDateString()}
+                                                {!isNaN(new Date(task.deadline).getTime()) 
+                                                    ? new Date(task.deadline).toLocaleDateString() 
+                                                    : task.deadline || "-"}
                                             </p>
                                         </div>
                                         <div>

@@ -60,11 +60,12 @@ export const sendTaskEmail = async (task) => {
         }
 
         // Legacy format support (from video transcription)
-        const receiverEmail = users[task.person];
+        const personName = task.person || task.assignedToName;
+        const receiverEmail = users[personName];
 
         // ❌ If no email found → skip
         if (!receiverEmail) {
-            console.log("No email found for:", task.person);
+            console.log("No email found for:", personName);
             return;
         }
 
@@ -74,7 +75,7 @@ export const sendTaskEmail = async (task) => {
             subject: "Task Reminder 🚨",
             html: `
                 <h3>New Task Assigned</h3>
-                <p><b>Task:</b> ${task.task}</p>
+                <p><b>Task:</b> ${task.task || task.taskName}</p>
                 <p><b>Deadline:</b> ${task.deadline}</p>
                 <p><b>Priority:</b> ${task.priority}</p>
             `

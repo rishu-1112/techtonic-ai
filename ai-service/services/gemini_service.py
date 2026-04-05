@@ -25,7 +25,7 @@ CRITICAL RULES:
    - Return results in the same language(s) as the input.
 
 2. PERSON IDENTIFICATION:
-   - A person is ALWAYS a proper human name (e.g., Rahul, Priya, राज, प्रिया).
+   - A person is ALWAYS a proper human name (e.g., Rahul, Priya, राज, प्रिया) not like eg : (the manager , the employee).
    - DO NOT treat verbs or actions as names (e.g., "Get", "Complete", "करना", "पूरा करना").
    - Common Hindi/Hinglish exclusions: "हाँ", "ठीक है", "ओके", "धन्यवाद", "नमस्ते", "अलविदा", "मैं", "आप", "वह", "वे", आदि are NOT names.
    - If a sentence starts with "Rahul," "Priya," "राज," or "प्रिया," → that person owns ALL following instructions until another name appears.
@@ -62,7 +62,7 @@ Return ONLY valid JSON (even if input is Hindi or mixed):
   "tasks": [
     {
       "task": "task description (in the same language as input)",
-      "person": "person name",
+      "assignedTo": "person name",
       "deadline": "deadline text",
       "priority": "High/Medium/Low"
     }
@@ -90,7 +90,7 @@ Transcript:
     tasks = extract_tasks(text)
     
     if tasks:
-        people = list(set([t["person"] for t in tasks if t.get("person")]))
+        people = list(set([t["assignedTo"] for t in tasks if t.get("assignedTo")]))
         if people:
             summary = f"Meeting focused on delegating tasks to: {', '.join(people)}."
         else:
@@ -99,7 +99,7 @@ Transcript:
         summary = "No actionable tasks were identified during the meeting."
         
     return {
-        
         "summary": summary,
-        "tasks": tasks
+        "tasks": tasks,
+        
     }

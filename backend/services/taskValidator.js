@@ -70,7 +70,11 @@ export const validateTaskData = async (taskData, isUpdate = false, excludeTaskId
     if (!taskData.deadline) {
         errors.push("Deadline is required");
     } else {
-        if (new Date(taskData.deadline) < new Date()) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Ignore time component
+        const deadlineDate = new Date(taskData.deadline);
+        if (!isNaN(deadlineDate.getTime()) && deadlineDate < today) {
+            // Ignore natural language dates like "tomorrow"
             errors.push("Deadline cannot be in the past");
         }
     }
@@ -97,8 +101,8 @@ export const validateTaskData = async (taskData, isUpdate = false, excludeTaskId
         const employee = await User.findById(taskData.assignedTo);
         if (!employee) {
             errors.push("Assigned employee not found");
-        } else if (employee.empId !== taskData.empId) {
-            errors.push(`empId mismatch: provided ${taskData.empId} but user has ${employee.empId}`);
+        } else if (employee.employeeId !== taskData.empId) {
+            errors.push(`Employee ID mismatch: provided ${taskData.empId} but user has ${employee.employeeId}`);
         }
     }
     
@@ -286,7 +290,7 @@ export const getUnresolvedConflicts = async (filters = {}) => {
         const conflicts = await Task.find(query)
             .populate("assignedTo", "name empId email")
             .populate("assignedBy", "name email")
-            .populate("flaggedBy", "name email")
+            .populate("inconsistencies.flaggedBy", "name email")
             .sort({ "inconsistencies.flaggedAt": -1 })
             .limit(filters.limit || 100);
         

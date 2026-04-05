@@ -8,6 +8,7 @@ import {
     checkInconsistencies,
     resolveConflict
 } from "../services/taskValidator.js";
+import { sendTaskEmail } from "../services/mailer.js";
 
 const router = express.Router();
 
@@ -199,6 +200,26 @@ router.patch("/conflicts/:taskId/approve", requireAuth, requireAdmin, async (req
                 action,
                 timestamp: new Date()
             });
+        }
+        
+        // Send email to the user if a user is assigned
+        try {
+            await result.task.populate("assignedTo", "name email");
+            if (result.task.assignedTo) {
+                await sendTaskEmail({
+                    taskName: result.task.taskName || result.task.task,
+                    empId: result.task.empId,
+                    deadline: result.task.deadline,
+                    priority: result.task.priority || "Low",
+                    description: result.task.description || "Task assigned after conflict resolution.",
+                    assignedToEmail: result.task.assignedTo.email,
+                    assignedToName: result.task.assignedTo.name,
+                    assignedByName: req.user.name,
+                    isNewAssignment: true 
+                });
+            }
+        } catch (mailError) {
+            console.error("Error sending resolution email:", mailError);
         }
         
         res.json({

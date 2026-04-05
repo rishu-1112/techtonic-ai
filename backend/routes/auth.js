@@ -9,10 +9,10 @@ const router = express.Router();
 // Register Route
 router.post("/register", async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { name, email, password, employeeId } = req.body;
 
-        if (!name || !email || !password) {
-            return res.status(400).json({ error: "Please enter all fields" });
+        if (!name || !email || !password || !employeeId) {
+            return res.status(400).json({ error: "Please enter all fields including Employee ID" });
         }
 
         const existingUser = await User.findOne({ email });
@@ -26,7 +26,8 @@ router.post("/register", async (req, res) => {
         const newUser = new User({
             name,
             email,
-            password: hashedPassword
+            password: hashedPassword,
+            employeeId
         });
 
         const savedUser = await newUser.save();

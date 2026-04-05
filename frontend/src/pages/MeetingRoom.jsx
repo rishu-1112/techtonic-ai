@@ -218,7 +218,7 @@ export default function MeetingRoom() {
       const tableColumn = ["Task", "Person", "Deadline", "Priority"];
       const tableRows = extractedTasks.map(t => [
         t.task,
-        t.person || "Unassigned",
+        t.assignedTo || t.person || "Unassigned",
         t.deadline || "-",
         t.priority || "-"
       ]);

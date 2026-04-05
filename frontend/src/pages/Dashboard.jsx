@@ -111,7 +111,7 @@ export default function Dashboard() {
   const markDone = async (id, currentStatus) => {
     try {
       await api.put(`/api/tasks/${id}`, {
-        status: currentStatus === "done" ? "pending" : "done",
+        status: currentStatus === "completed" ? "pending" : "completed",
       });
       fetchTasks();
     } catch (err) {
@@ -131,7 +131,7 @@ export default function Dashboard() {
 
   const startEditing = (t) => {
     setEditingId(t._id);
-    setEditForm({ task: t.task, deadline: t.deadline, priority: t.priority });
+    setEditForm({ task: t.taskName || t.task, deadline: t.deadline, priority: t.priority });
   };
 
   const saveEdit = async (id) => {
@@ -146,7 +146,7 @@ export default function Dashboard() {
 
   // Stats calculation
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.status === "done").length;
+  const completedTasks = tasks.filter(t => t.status === "completed").length;
   const pendingTasks = tasks.filter(t => t.status === "pending").length;
   const highPriorityTasks = tasks.filter(t => t.priority === "High").length;
 
@@ -186,8 +186,8 @@ export default function Dashboard() {
 
     tasks.forEach(task => {
       const taskData = [
-        task.task,
-        task.person || "Unassigned",
+        task.taskName || task.task,
+        task.assignedToName || task.person || "Unassigned",
         task.deadline || "-",
         task.priority || "-",
         task.status
@@ -323,10 +323,10 @@ export default function Dashboard() {
               return (
                 <div
                   key={t._id}
-                  className={`relative bg-white/10 backdrop-blur-md shadow-lg rounded-2xl p-5 border transition-all ${dueToday && t.status !== "done" ? 'border-red-500/50 shadow-red-500/10' : 'border-white/10'}`}
+                  className={`relative bg-white/10 backdrop-blur-md shadow-lg rounded-2xl p-5 border transition-all ${dueToday && t.status !== "completed" ? 'border-red-500/50 shadow-red-500/10' : 'border-white/10'}`}
                 >
                   {/* Status Indicator Bar */}
-                  <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${t.status === "done" ? "bg-green-500" : dueToday ? "bg-red-500" : "bg-blue-500"}`}></div>
+                  <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${t.status === "completed" ? "bg-green-500" : dueToday ? "bg-red-500" : "bg-blue-500"}`}></div>
 
                   {editingId === t._id ? (
                     <div className="space-y-3 pl-2">
@@ -360,8 +360,8 @@ export default function Dashboard() {
                   ) : (
                     <div className="pl-2">
                       <div className="flex justify-between items-start mb-2">
-                        <h3 className={`font-semibold text-lg ${t.status === "done" ? "text-gray-400 line-through" : "text-white"}`}>
-                          {t.task}
+                        <h3 className={`font-semibold text-lg ${t.status === "completed" ? "text-gray-400 line-through" : "text-white"}`}>
+                          {t.taskName || t.task}
                         </h3>
                         <div className="flex items-center gap-2 opacity-50 hover:opacity-100 transition-opacity">
                           <button onClick={() => startEditing(t)} className="p-1 hover:text-blue-400 transition-colors"><Edit2 size={16} /></button>
@@ -370,7 +370,7 @@ export default function Dashboard() {
                       </div>
 
                       <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-400 mb-4 mt-1">
-                        <span className="flex items-center gap-1">👤 {t.person || "Unassigned"}</span>
+                        <span className="flex items-center gap-1">👤 {t.assignedToName || t.person || "Unassigned"}</span>
                         <span className={`flex items-center gap-1 ${dueToday && t.status !== "done" ? "text-red-400 font-medium" : ""}`}>
                           📅 {t.deadline || "No deadline"}
                         </span>
@@ -386,7 +386,7 @@ export default function Dashboard() {
                             {t.priority}
                           </span>
                           <span className={`px-2 py-0.5 rounded-md text-xs font-medium bg-opacity-20 border
-                            ${t.status === "done" ? "bg-green-500 border-green-500/30 text-green-300" : "bg-gray-500 border-gray-500/30 text-gray-300"}`}
+                            ${t.status === "completed" ? "bg-green-500 border-green-500/30 text-green-300" : "bg-gray-500 border-gray-500/30 text-gray-300"}`}
                           >
                             {t.status}
                           </span>
@@ -394,12 +394,12 @@ export default function Dashboard() {
 
                         <button
                           onClick={() => markDone(t._id, t.status)}
-                          className={`flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg transition-all ${t.status === "done"
+                          className={`flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg transition-all ${t.status === "completed"
                               ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
                               : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg"
                             }`}
                         >
-                          <CheckCircle size={14} /> {t.status === "done" ? "Undo" : "Complete"}
+                          <CheckCircle size={14} /> {t.status === "completed" ? "Undo" : "Complete"}
                         </button>
                       </div>
                     </div>

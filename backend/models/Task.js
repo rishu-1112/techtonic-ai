@@ -3,26 +3,39 @@ import mongoose from "mongoose";
 const taskSchema = new mongoose.Schema({
     taskName: {
         type: String,
-        required: true,
         trim: true
     },
     empId: {
         type: String,
-        required: true,
-        trim: true
+        trim: true,
+        default: ""
     },
     assignedTo: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true
+        ref: "User"
+    },
+    assignedToName: {
+        type: String,
+        trim: true,
+        default: ""
+    },
+    assignedToEmail: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        default: ""
+    },
+    assignmentStatus: {
+        type: String,
+        enum: ["unassigned", "assigned"],
+        default: "unassigned"
     },
     assignedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-        required: true
     },
     deadline: {
-        type: Date,
+        type: String,
         required: true
     },
     priority: {
@@ -58,7 +71,10 @@ const taskSchema = new mongoose.Schema({
         },
         description: String,
         flaggedAt: Date,
-        flaggedBy: mongoose.Schema.Types.ObjectId,
+        flaggedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User"
+        },
         severity: {
             type: String,
             enum: ["warning", "critical"],

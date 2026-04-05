@@ -333,8 +333,66 @@ router.delete("/:id", requireAuth, async (req, res) => {
     }
 });
 
-/**
- * PATCH /api/tasks/:id/assign - Assign task to employee (Admin only)
+/** * PATCH /api/tasks/:id - Update task details (Admin only)
+ */
+router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { taskName, empId, assignedTo, deadline, priority, description } = req.body;
+        
+        const task = await Task.findById(req.params.id);
+        if (!task) {
+            return res.status(404).json({ error: "Task not found" });
+        }
+        
+        // Update fields
+        if (taskName !== undefined) task.taskName = taskName;
+        if (empId !== undefined) task.empId = empId;
+        if (assignedTo !== undefined) {
+            task.assignedTo = assignedTo;
+            task.assignmentStatus = assignedTo ? "assigned" : "unassigned";
+            if (assignedTo) {
+                const user = await User.findById(assignedTo);
+                if (user) {
+                    task.assignedToName = user.name;
+                    task.empId = user.employeeId;
+                }
+            }
+        }
+        if (deadline !== undefined) task.deadline = deadline;
+        if (priority !== undefined) task.priority = priority;
+        if (description !== undefined) task.description = description;
+        
+        task.lastModifiedBy = req.user.id;
+        task.lastModifiedAt = new Date();
+        
+        await task.save();
+        await task.populate("assignedTo", "name empId email");
+        await task.populate("assignedBy", "name email");
+        
+        // Emit real-time update
+        if (req.app.locals.io) {
+            emitTaskUpdate(req.app.locals.io, task._id, "task_updated", {
+                task: task.toObject(),
+                updatedBy: req.user.name
+            });
+        }
+        
+        // If newly assigned, send email
+        if (assignedTo !== undefined && !task.assignedTo && assignedTo) {
+            await sendTaskEmail(task, "assigned");
+        }
+        
+        res.json({
+            message: "Task updated successfully",
+            task
+        });
+    } catch (error) {
+        console.error("Error updating task:", error);
+        res.status(500).json({ error: "Failed to update task", details: error.message });
+    }
+});
+
+/** * PATCH /api/tasks/:id/assign - Assign task to employee (Admin only)
  */
 router.patch("/:id/assign", requireAuth, requireAdmin, async (req, res) => {
     try {

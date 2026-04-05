@@ -4,6 +4,7 @@ import fs from "fs";
 import FormData from "form-data";
 import Recording from "../models/Recording.js";
 import Task from "../models/Task.js";
+import User from "../models/User.js";
 import { requireAuth } from "../middleware/auth.js";
 import multer from "multer";
 import path from "path";
@@ -100,13 +101,43 @@ async function processRecordingAsync(recordingId, filePath) {
 
       // Save tasks to database
       for (const taskData of aiRes.data.tasks) {
-        const task = new Task({
-          task: taskData.task,
-          person: taskData.person,
+        const personName = taskData.assignedTo;
+        
+        // Skip tasks with no assigned person
+        if (!personName || personName.trim() === "") {
+          console.log("Skipping task with no assigned person:", taskData.task);
+          continue;
+        }
+        
+        // Find user by name
+        const user = await User.findOne({ name: personName });
+        
+        const taskFields = {
+          taskName: taskData.task,
+          assignedBy: recording.userId,
           deadline: taskData.deadline,
           priority: taskData.priority || "Low",
-          owner: recording.userId
-        });
+          description: taskData.task,
+          assignedToName: personName
+        };
+        
+        if (user) {
+          taskFields.assignedTo = user._id;
+          taskFields.empId = user.employeeId;
+          taskFields.assignmentStatus = "assigned";
+        } else {
+          taskFields.assignmentStatus = "unassigned";
+          // Flag inconsistency for missing user
+          taskFields.inconsistencies = [{
+            type: "name_not_found",
+            description: `User with name "${personName}" not found in database`,
+            severity: "critical",
+            flaggedAt: new Date(),
+            flaggedBy: recording.userId
+          }];
+        }
+        
+        const task = new Task(taskFields);
         await task.save();
       }
     }

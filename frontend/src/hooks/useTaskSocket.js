@@ -23,13 +23,12 @@ export const useTaskSocket = (userRole, userId) => {
         }
     }, []);
 
-    // Resume polling with callback
     const resumePolling = useCallback((pollFn) => {
         if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
         }
-        pollingIntervalRef.current = setInterval(pollFn, 10000);
-        console.log("[Socket] Polling resumed");
+        // Disabled per user request
+        console.log("[Socket] Polling disabled by admin");
     }, []);
 
     useEffect(() => {

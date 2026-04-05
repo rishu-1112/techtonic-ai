@@ -9,6 +9,7 @@ import path from "path";
 import mongoose from "mongoose";
 import connectDB from "./config/db.js";
 import Task from "./models/Task.js";
+import User from "./models/User.js";
 import Recording from "./models/Recording.js";
 import { sendTaskEmail } from "./services/mailer.js";
 import { fileURLToPath } from "url";
@@ -132,15 +133,48 @@ app.post("/upload", requireAuth, upload.single("audio"), async (req, res) => {
 
         console.log("[Upload] Processing tasks:", aiData.tasks.length);
         for (const t of aiData.tasks) {
-            const newTask = await Task.create({
-                task: t.task,
-                person: t.person,
-                deadline: t.deadline,
-                priority: t.priority,
-                owner: req.user.id,
-                ...(meetingId && { meetingId: meetingId })
-            });
+            const personName = t.assignedTo || t.person || "Unassigned";
+            
+            let employee = null;
+            if (personName !== "Unassigned") {
+               employee = await User.findOne({ 
+                   name: new RegExp(`^${personName}$`, 'i'), 
+                   role: "employee" 
+               });
+            }
 
+            const taskData = {
+                taskName: t.task,
+                assignedToName: personName,
+                deadline: t.deadline || "Not specified",
+                priority: t.priority || "Low",
+                assignedBy: req.user.id,
+                ...(meetingId && { meetingId: meetingId })
+            };
+
+            if (employee) {
+                taskData.assignedTo = employee._id;
+                taskData.empId = employee.employeeId;
+                taskData.assignedToEmail = employee.email;
+                taskData.assignmentStatus = "assigned";
+            } else {
+                taskData.assignmentStatus = "unassigned";
+                taskData.inconsistencies = [{
+                    type: "empid_mismatch",
+                    description: `AI assigned task to "${personName}" but user is not registered in Database.`,
+                    severity: "critical",
+                    flaggedAt: new Date(),
+                    flaggedBy: req.user.id
+                }];
+            }
+
+            const newTask = await Task.create(taskData);
+            
+            if (employee) {
+                newTask.isNewAssignment = true;
+            }
+
+            // Sends formatted HTML if employee found, else acts correctly as fallback logger "No email found..."
             await sendTaskEmail(newTask);
             savedTasks.push(newTask);
         }
@@ -182,62 +216,6 @@ app.post("/upload", requireAuth, upload.single("audio"), async (req, res) => {
 
 
 
-app.get("/api/tasks", requireAuth, async (req, res) => {
-    try {
-        const tasks = await Task.find({ owner: new mongoose.Types.ObjectId(req.user.id) }).sort({ createdAt: -1 });
-        res.json(tasks);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to fetch tasks" });
-    }
-});
-
-app.put("/api/tasks/:id", requireAuth, async (req, res) => {
-    try {
-        const task = await Task.findById(req.params.id);
-        if (!task || task.owner.toString() !== req.user.id) {
-            return res.status(403).json({ error: "Unauthorized" });
-        }
-        const updated = await Task.findByIdAndUpdate(
-            req.params.id,
-            { status: req.body.status },
-            { new: true }
-        );
-        res.json(updated);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to update task" });
-    }
-});
-
-app.put("/api/tasks/edit/:id", requireAuth, async (req, res) => {
-    try {
-        const task = await Task.findById(req.params.id);
-        if (!task || task.owner.toString() !== req.user.id) {
-            return res.status(403).json({ error: "Unauthorized" });
-        }
-        const { task: taskText, deadline, priority } = req.body;
-        const updated = await Task.findByIdAndUpdate(
-            req.params.id,
-            { task: taskText, deadline, priority },
-            { new: true }
-        );
-        res.json(updated);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to update task details" });
-    }
-});
-
-app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
-    try {
-        const task = await Task.findById(req.params.id);
-        if (!task || task.owner.toString() !== req.user.id) {
-            return res.status(403).json({ error: "Unauthorized" });
-        }
-        await Task.findByIdAndDelete(req.params.id);
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: "Failed to delete task" });
-    }
-});
 
 connectDB();
 server.listen(5000, () => {

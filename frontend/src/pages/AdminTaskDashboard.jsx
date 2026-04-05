@@ -19,6 +19,16 @@ export default function AdminTaskDashboard() {
     const [selectedTask, setSelectedTask] = useState(null);
     const [resolutionNotes, setResolutionNotes] = useState("");
     const [resolveAction, setResolveAction] = useState("resolve_only");
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editTask, setEditTask] = useState(null);
+    const [editForm, setEditForm] = useState({
+        taskName: "",
+        empId: "",
+        assignedTo: "",
+        deadline: "",
+        priority: "Low",
+        description: ""
+    });
 
     const token = localStorage.getItem("token");
     const api = axios.create({
@@ -37,7 +47,7 @@ export default function AdminTaskDashboard() {
             setLoading(true);
             const [statsRes, tasksRes, conflictsRes] = await Promise.all([
                 api.get("/api/admin/dashboard/overview"),
-                api.get("/api/tasks?hasConflicts=true"),
+                api.get("/api/tasks"),
                 api.get("/api/admin/conflicts")
             ]);
 
@@ -76,6 +86,31 @@ export default function AdminTaskDashboard() {
             fetchDashboardData();
         } catch (err) {
             alert(err.response?.data?.error || "Error deleting task");
+        }
+    };
+
+    const openEditModal = (task) => {
+        setEditTask(task);
+        setEditForm({
+            taskName: task.taskName || "",
+            empId: task.empId || "",
+            assignedTo: task.assignedTo?._id || "",
+            deadline: task.deadline || "",
+            priority: task.priority || "Low",
+            description: task.description || ""
+        });
+        setShowEditModal(true);
+    };
+
+    const updateTask = async () => {
+        try {
+            const res = await api.patch(`/api/tasks/${editTask._id}`, editForm);
+            alert("Task updated!");
+            setShowEditModal(false);
+            setEditTask(null);
+            fetchDashboardData();
+        } catch (err) {
+            alert(err.response?.data?.error || "Error updating task");
         }
     };
 
@@ -264,11 +299,19 @@ export default function AdminTaskDashboard() {
                                     {/* Action Buttons */}
                                     <div className="flex gap-3 flex-wrap">
                                         <button
-                                            onClick={() => setSelectedTask(task)}
-                                            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                                            onClick={() => openEditModal(task)}
+                                            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
                                         >
-                                            <CheckCircle size={16} /> Resolve & Approve
+                                            <Edit2 size={16} /> Edit
                                         </button>
+                                        {task.inconsistencies && task.inconsistencies.length > 0 && (
+                                            <button
+                                                onClick={() => setSelectedTask(task)}
+                                                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                                            >
+                                                <CheckCircle size={16} /> Resolve & Approve
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => deleteTask(task._id)}
                                             className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
@@ -292,6 +335,105 @@ export default function AdminTaskDashboard() {
                     )}
                 </div>
             </div>
+
+            {/* Edit Task Modal */}
+            {showEditModal && editTask && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
+                        <div className="sticky top-0 bg-gray-50 border-b p-6">
+                            <h2 className="text-2xl font-bold text-gray-900">Edit Task</h2>
+                            <p className="text-gray-600 text-sm mt-1">{editTask.taskName}</p>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                                    Task Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editForm.taskName}
+                                    onChange={(e) => setEditForm({...editForm, taskName: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                                    Employee ID
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editForm.empId}
+                                    onChange={(e) => setEditForm({...editForm, empId: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                                    Assigned To (User ID)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editForm.assignedTo}
+                                    onChange={(e) => setEditForm({...editForm, assignedTo: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                                    Deadline
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    value={editForm.deadline}
+                                    onChange={(e) => setEditForm({...editForm, deadline: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                                    Priority
+                                </label>
+                                <select
+                                    value={editForm.priority}
+                                    onChange={(e) => setEditForm({...editForm, priority: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                >
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                                    Description
+                                </label>
+                                <textarea
+                                    value={editForm.description}
+                                    onChange={(e) => setEditForm({...editForm, description: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-gray-900"
+                                    rows="3"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="sticky bottom-0 bg-gray-50 border-t p-6 flex gap-3">
+                            <button
+                                onClick={() => setShowEditModal(false)}
+                                className="flex-1 px-4 py-2 bg-gray-300 text-gray-900 rounded hover:bg-gray-400 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={updateTask}
+                                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                            >
+                                Update Task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Conflict Resolution Modal */}
             {selectedTask && selectedTask.inconsistencies?.length > 0 && (
