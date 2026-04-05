@@ -323,6 +323,19 @@ export default function AdminTaskDashboardWithSocket() {
         navigate("/login");
     };
 
+    // Group tasks by meeting/recording
+    const groupTasksByMeeting = (data) => {
+        const grouped = {};
+        data.forEach(task => {
+            const meetingKey = task.meetingId || task.recordingId || "direct-task";
+            if (!grouped[meetingKey]) {
+                grouped[meetingKey] = [];
+            }
+            grouped[meetingKey].push(task);
+        });
+        return grouped;
+    };
+
     const getFilteredData = () => {
         if (filterMode === "conflicts") return conflicts.filter(t => t.inconsistencies?.filter(i => !i.resolved).length > 0);
         if (filterMode === "critical") {
@@ -511,137 +524,158 @@ export default function AdminTaskDashboardWithSocket() {
                 </div>
 
                 {/* Task List */}
-                <div className="space-y-4">
+                <div className="space-y-6">
                     {filteredData.length === 0 ? (
                         <div className="text-center py-12 bg-white rounded-lg">
                             <CheckCircle size={48} className="mx-auto text-green-500 mb-4" />
                             <p className="text-gray-500">No tasks to display</p>
                         </div>
                     ) : (
-                        filteredData.map(task => (
-                            <div
-                                key={task._id}
-                                className="bg-white rounded-lg shadow-md border-l-4 border-blue-500 hover:shadow-lg transition-shadow"
-                            >
-                                <div className="p-6">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <h3 className="text-lg font-semibold text-gray-900">
-                                                    {task.taskName || task.task}
-                                                </h3>
-                                                <span className="px-3 py-1 rounded-full text-xs bg-blue-100 text-blue-800 font-semibold">
-                                                    {task.status}
-                                                </span>
-                                                {task?.inconsistencies?.filter(i => !i.resolved).length > 0 && (
-                                                    <span className="px-3 py-1 rounded-full text-xs bg-red-100 text-red-800 font-semibold">
-                                                        {task.inconsistencies.length} conflicts
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <span className="text-sm font-bold text-gray-600">
-                                            {task.priority} Priority
-                                        </span>
+                        Object.entries(groupTasksByMeeting(filteredData)).map(([meetingKey, meetingTasks], idx) => (
+                            <div key={meetingKey} className="space-y-3">
+                                {/* Meeting Separator */}
+                                <div className="flex items-center gap-4 py-4">
+                                    <div className="flex-1 h-1 bg-gradient-to-r from-blue-400 to-purple-400"></div>
+                                    <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <p className="text-sm font-bold text-blue-900">
+                                            🎤 Meeting {idx + 1}
+                                        </p>
+                                        <p className="text-xs text-blue-700">
+                                            {meetingTasks.length} task{meetingTasks.length !== 1 ? 's' : ''}
+                                        </p>
                                     </div>
-
-                                    <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-4 text-sm">
-                                        <div>
-                                            <p className="text-gray-500">EmpID</p>
-                                            <p className="font-semibold text-gray-900">{task.empId}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500">Assigned To</p>
-                                            <p className="font-semibold text-gray-900">
-                                                {task.assignedTo?.name || task.assignedToName || "Unassigned"}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500">Assigned By</p>
-                                            <p className="font-semibold text-gray-900">
-                                                {task.assignedBy?.name || "Unknown"}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500">Deadline</p>
-                                            <p className="font-semibold text-gray-900">
-                                                {!isNaN(new Date(task.deadline).getTime()) 
-                                                    ? new Date(task.deadline).toLocaleDateString() 
-                                                    : task.deadline || "-"}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500">Finalized</p>
-                                            <p className={`font-semibold ${
-                                                task.isFinalized ? "text-green-600" : "text-yellow-600"
-                                            }`}>
-                                                {task.isFinalized ? "Yes" : "No"}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500">Can Delete</p>
-                                            <p className="font-semibold text-gray-900">
-                                                {task.canDelete ? "Yes" : "No"}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Conflicts Display */}
-                                    {task.inconsistencies && task.inconsistencies.filter(i => !i.resolved).length > 0 && (
-                                        <div className="mb-4 space-y-2">
-                                            {task.inconsistencies.map((inc, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    className={`p-3 rounded border-l-4 ${
-                                                        inc.severity === "critical"
-                                                            ? "bg-red-50 border-red-500 text-red-800"
-                                                            : "bg-yellow-50 border-yellow-500 text-yellow-800"
-                                                    }`}
-                                                >
-                                                    <div className="flex items-start gap-2">
-                                                        <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
-                                                        <div>
-                                                            <p className="font-semibold capitalize">
-                                                                {inc.type.replace(/_/g, " ")}
-                                                            </p>
-                                                            <p className="text-sm">{inc.description}</p>
-                                                            <p className="text-xs mt-1 opacity-75">
-                                                                Flagged: {new Date(inc.flaggedAt).toLocaleString()}
-                                                            </p>
+                                    <div className="flex-1 h-1 bg-gradient-to-r from-purple-400 to-blue-400"></div>
+                                </div>
+                                
+                                {/* Tasks for this meeting */}
+                                <div className="space-y-3">
+                                    {meetingTasks.map(task => (
+                                        <div
+                                            key={task._id}
+                                            className="bg-white rounded-lg shadow-md border-l-4 border-blue-500 hover:shadow-lg transition-shadow"
+                                        >
+                                            <div className="p-6">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <h3 className="text-lg font-semibold text-gray-900">
+                                                                {task.taskName || task.task}
+                                                            </h3>
+                                                            <span className="px-3 py-1 rounded-full text-xs bg-blue-100 text-blue-800 font-semibold">
+                                                                {task.status}
+                                                            </span>
+                                                            {task?.inconsistencies?.filter(i => !i.resolved).length > 0 && (
+                                                                <span className="px-3 py-1 rounded-full text-xs bg-red-100 text-red-800 font-semibold">
+                                                                    {task.inconsistencies.filter(i => !i.resolved).length} conflicts
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
+                                                    <span className="text-sm font-bold text-gray-600">
+                                                        {task.priority} Priority
+                                                    </span>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
 
-                                    {/* Action Buttons */}
-                                    <div className="flex gap-3 flex-wrap">
-                                        {task.inconsistencies && task.inconsistencies.length > 0 && (
-                                            <button
-                                                onClick={() => setSelectedTask(task)}
-                                                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
-                                            >
-                                                <CheckCircle size={16} /> Resolve & Approve
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={() => deleteTask(task._id)}
-                                            className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-                                        >
-                                            <Trash2 size={16} /> Delete
-                                        </button>
-                                        <button
-                                            onClick={() =>
-                                                setSelectedTask(
-                                                    selectedTask?._id === task._id ? null : task
-                                                )
-                                            }
-                                            className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition"
-                                        >
-                                            <Eye size={16} /> Details
-                                        </button>
-                                    </div>
+                                                <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-4 text-sm">
+                                                    <div>
+                                                        <p className="text-gray-500">EmpID</p>
+                                                        <p className="font-semibold text-gray-900">{task.empId || "-"}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">Assigned To</p>
+                                                        <p className="font-semibold text-gray-900">
+                                                            {task.assignedTo?.name || task.assignedToName || "Unassigned"}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">Assigned By</p>
+                                                        <p className="font-semibold text-gray-900">
+                                                            {task.assignedBy?.name || "Unknown"}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">Deadline</p>
+                                                        <p className="font-semibold text-gray-900">
+                                                            {!isNaN(new Date(task.deadline).getTime()) 
+                                                                ? new Date(task.deadline).toLocaleDateString() 
+                                                                : task.deadline || "-"}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">Finalized</p>
+                                                        <p className={`font-semibold ${
+                                                            task.isFinalized ? "text-green-600" : "text-yellow-600"
+                                                        }`}>
+                                                            {task.isFinalized ? "Yes" : "No"}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">Can Delete</p>
+                                                        <p className="font-semibold text-gray-900">
+                                                            {task.canDelete ? "Yes" : "No"}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Conflicts Display */}
+                                                {task.inconsistencies && task.inconsistencies.filter(i => !i.resolved).length > 0 && (
+                                                    <div className="mb-4 space-y-2">
+                                                        {task.inconsistencies.filter(i => !i.resolved).map((inc, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                className={`p-3 rounded border-l-4 ${
+                                                                    inc.severity === "critical"
+                                                                        ? "bg-red-50 border-red-500 text-red-800"
+                                                                        : "bg-yellow-50 border-yellow-500 text-yellow-800"
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-start gap-2">
+                                                                    <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+                                                                    <div>
+                                                                        <p className="font-semibold capitalize">
+                                                                            {inc.type.replace(/_/g, " ")}
+                                                                        </p>
+                                                                        <p className="text-sm">{inc.description}</p>
+                                                                        <p className="text-xs mt-1 opacity-75">
+                                                                            Flagged: {new Date(inc.flaggedAt).toLocaleString()}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Action Buttons */}
+                                                <div className="flex gap-3 flex-wrap">
+                                                    {task.inconsistencies && task.inconsistencies.filter(i => !i.resolved).length > 0 && (
+                                                        <button
+                                                            onClick={() => setSelectedTask(task)}
+                                                            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                                                        >
+                                                            <CheckCircle size={16} /> Resolve & Approve
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => deleteTask(task._id)}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+                                                    >
+                                                        <Trash2 size={16} /> Delete
+                                                    </button>
+                                                    <button
+                                                        onClick={() =>
+                                                            setSelectedTask(
+                                                                selectedTask?._id === task._id ? null : task
+                                                            )
+                                                        }
+                                                        className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition"
+                                                    >
+                                                        <Eye size={16} /> Details
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         ))

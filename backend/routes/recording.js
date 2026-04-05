@@ -102,23 +102,71 @@ async function processRecordingAsync(recordingId, filePath) {
       // Save tasks to database
       for (const taskData of aiRes.data.tasks) {
         const personName = taskData.assignedTo;
+        const taskName = taskData.task;
+        const deadline = taskData.deadline;
         
-        // Skip tasks with no assigned person
+        const inconsistencies = [];
+        
+        // Validate required fields
+        if (!taskName || taskName.trim() === "") {
+          inconsistencies.push({
+            type: "missing_task_name",
+            description: "Task name is missing or empty",
+            severity: "critical",
+            flaggedAt: new Date(),
+            flaggedBy: recording.userId,
+            resolved: false
+          });
+        }
+        
+        if (!deadline || deadline.trim() === "") {
+          inconsistencies.push({
+            type: "missing_deadline",
+            description: "Deadline is missing or empty",
+            severity: "critical",
+            flaggedAt: new Date(),
+            flaggedBy: recording.userId,
+            resolved: false
+          });
+        }
+        
         if (!personName || personName.trim() === "") {
-          console.log("Skipping task with no assigned person:", taskData.task);
-          continue;
+          inconsistencies.push({
+            type: "missing_assigned_to",
+            description: "Assigned person is missing or empty",
+            severity: "critical",
+            flaggedAt: new Date(),
+            flaggedBy: recording.userId,
+            resolved: false
+          });
         }
         
         // Find user by name
-        const user = await User.findOne({ name: personName });
+        let user = null;
+        if (personName && personName.trim() !== "") {
+          user = await User.findOne({ name: personName });
+          if (!user) {
+            inconsistencies.push({
+              type: "missing_assigned_to",
+              description: `User with name "${personName}" not found in database`,
+              severity: "critical",
+              flaggedAt: new Date(),
+              flaggedBy: recording.userId,
+              resolved: false
+            });
+          }
+        }
         
         const taskFields = {
-          taskName: taskData.task,
+          taskName: taskName || "Untitled Task",
           assignedBy: recording.userId,
-          deadline: taskData.deadline,
+          deadline: deadline || "No deadline",
           priority: taskData.priority || "Low",
-          description: taskData.task,
-          assignedToName: personName
+          description: taskName || "Task assigned from meeting",
+          assignedToName: personName,
+          meetingId: recording.meetingId || "",
+          recordingId: recording._id,
+          inconsistencies: inconsistencies
         };
         
         if (user) {
@@ -127,18 +175,11 @@ async function processRecordingAsync(recordingId, filePath) {
           taskFields.assignmentStatus = "assigned";
         } else {
           taskFields.assignmentStatus = "unassigned";
-          // Flag inconsistency for missing user
-          taskFields.inconsistencies = [{
-            type: "name_not_found",
-            description: `User with name "${personName}" not found in database`,
-            severity: "critical",
-            flaggedAt: new Date(),
-            flaggedBy: recording.userId
-          }];
         }
         
         const task = new Task(taskFields);
         await task.save();
+        console.log("📌 Task saved:", { taskName, assignedTo: personName, conflicts: inconsistencies.length });
       }
     }
 

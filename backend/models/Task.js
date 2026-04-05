@@ -53,6 +53,17 @@ const taskSchema = new mongoose.Schema({
         default: ""
     },
     
+    // Meeting/Recording tracking for visual separation
+    meetingId: {
+        type: String,
+        default: ""
+    },
+    
+    recordingId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Recording"
+    },
+    
     // Validation & Conflict Tracking
     nameMapping: {
         originalName: String,
@@ -67,7 +78,7 @@ const taskSchema = new mongoose.Schema({
     inconsistencies: [{
         type: {
             type: String,
-            enum: ["duplicate_name", "empid_mismatch", "name_change", "status_conflict"],
+            enum: ["duplicate_name", "empid_mismatch", "name_change", "status_conflict", "missing_assigned_to", "missing_task_name", "missing_deadline"],
         },
         description: String,
         flaggedAt: Date,
@@ -79,7 +90,13 @@ const taskSchema = new mongoose.Schema({
             type: String,
             enum: ["warning", "critical"],
             default: "warning"
-        }
+        },
+        resolved: {
+            type: Boolean,
+            default: false
+        },
+        resolvedAt: Date,
+        resolvedBy: mongoose.Schema.Types.ObjectId
     }],
     
     isFinalized: {

@@ -204,19 +204,24 @@ router.patch("/conflicts/:taskId/approve", requireAuth, requireAdmin, async (req
         
         // Send email to the user if a user is assigned
         try {
-            await result.task.populate("assignedTo", "name email");
-            if (result.task.assignedTo) {
+            const populatedTask = await Task.findById(req.params.taskId)
+                .populate("assignedTo", "name email");
+            
+            if (populatedTask && populatedTask.assignedTo) {
+                console.log("📧 Sending conflict resolution email to:", populatedTask.assignedTo.email);
                 await sendTaskEmail({
-                    taskName: result.task.taskName || result.task.task,
-                    empId: result.task.empId,
-                    deadline: result.task.deadline,
-                    priority: result.task.priority || "Low",
-                    description: result.task.description || "Task assigned after conflict resolution.",
-                    assignedToEmail: result.task.assignedTo.email,
-                    assignedToName: result.task.assignedTo.name,
+                    taskName: populatedTask.taskName || populatedTask.task,
+                    empId: populatedTask.empId,
+                    deadline: populatedTask.deadline,
+                    priority: populatedTask.priority || "Low",
+                    description: populatedTask.description || "Task assigned after conflict resolution.",
+                    assignedToEmail: populatedTask.assignedTo.email,
+                    assignedToName: populatedTask.assignedTo.name,
                     assignedByName: req.user.name,
-                    isNewAssignment: true 
+                    isNewAssignment: true,
+                    conflictResolved: true
                 });
+                console.log("✅ Email sent successfully!");
             }
         } catch (mailError) {
             console.error("Error sending resolution email:", mailError);
