@@ -11,23 +11,33 @@ const transporter = nodemailer.createTransport({
 
 export const sendTaskEmail = async (task) => {
     try {
-        // Support for new task assignment format
-        if (task.assignedToEmail && task.isNewAssignment) {
+        // Support for new task assignment and update format
+        if (task.assignedToEmail) {
+            const isTaskUpdate = task.isTaskEdit === true;
+        const isReminder = task.isReminder === true;
+        const headerColor = isReminder ? "#e55353" : isTaskUpdate ? "#17a2b8" : "#667eea";
+        const headerIcon = isReminder ? "⏰" : isTaskUpdate ? "✏️" : "📋";
+        const headerText = isReminder ? "Task Reminder" : isTaskUpdate ? "Task Updated" : "New Task Assigned";
+        const messageText = isReminder
+            ? `Reminder: your task is due ${task.reminderType || "soon"}.`
+            : isTaskUpdate 
+                ? `Admin <strong>${task.assignedByName}</strong> has updated your task:` 
+                : `Admin <strong>${task.assignedByName}</strong> has assigned you a new task:`;
             const mailOptions = {
                 from: process.env.ADMIN_MAIL,
                 to: task.assignedToEmail,
-                subject: `New Task Assigned: ${task.taskName} 📋`,
+                subject: `${headerText}: ${task.taskName} ${headerIcon}`,
                 html: `
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0;">
-                            <h2 style="margin: 0;">📋 New Task Assigned</h2>
+                        <div style="background: linear-gradient(135deg, ${headerColor} 0%, ${isTaskUpdate ? '#138496' : '#764ba2'} 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                            <h2 style="margin: 0;">${headerIcon} ${headerText}</h2>
                         </div>
                         <div style="background: #f8f9fa; padding: 20px; border-radius: 0 0 8px 8px; border: 1px solid #e9ecef;">
                             <p style="margin-top: 0;">Hi <strong>${task.assignedToName}</strong>,</p>
                             
-                            <p>Admin <strong>${task.assignedByName}</strong> has assigned you a new task:</p>
+                            <p>${messageText}</p>
                             
-                            <div style="background: white; padding: 15px; border-left: 4px solid #667eea; margin: 20px 0;">
+                            <div style="background: white; padding: 15px; border-left: 4px solid ${headerColor}; margin: 20px 0;">
                                 <p style="margin: 8px 0;"><strong>Task Name:</strong> ${task.taskName}</p>
                                 <p style="margin: 8px 0;"><strong>Employee ID:</strong> ${task.empId}</p>
                                 <p style="margin: 8px 0;"><strong>Deadline:</strong> ${new Date(task.deadline).toLocaleDateString()}</p>
@@ -36,7 +46,9 @@ export const sendTaskEmail = async (task) => {
                                     task.priority === "Medium" ? "#ff9800" : 
                                     "#28a745"
                                 }; font-weight: bold;">${task.priority}</span></p>
+                                ${task.status ? `<p style="margin: 8px 0;"><strong>Status:</strong> <span style="text-transform: capitalize;">${task.status}</span></p>` : ''}
                                 ${task.description ? `<p style="margin: 8px 0;"><strong>Description:</strong> ${task.description}</p>` : ''}
+                                ${isTaskUpdate ? `<p style="margin: 8px 0; color: #666; font-size: 12px;"><strong>Last Updated:</strong> ${new Date(task.lastModifiedAt).toLocaleString()}</p>` : ''}
                             </div>
                             
                             <p style="color: #666; font-size: 14px;">
@@ -55,7 +67,7 @@ export const sendTaskEmail = async (task) => {
             };
 
             await transporter.sendMail(mailOptions);
-            console.log(`✅ Email sent to ${task.assignedToEmail} for task: ${task.taskName}`);
+            console.log(`✅ Email sent to ${task.assignedToEmail} for ${isTaskUpdate ? 'updated' : 'new'} task: ${task.taskName}`);
             return;
         }
 

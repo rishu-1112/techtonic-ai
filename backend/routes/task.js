@@ -377,9 +377,29 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
             });
         }
         
-        // If newly assigned, send email
-        if (assignedTo !== undefined && !task.assignedTo && assignedTo) {
-            await sendTaskEmail(task, "assigned");
+        // Send email notification if task is assigned (new or edited)
+        if (task.assignedTo) {
+            const isNewAssignment = assignedTo !== undefined && !task.assignedTo;
+            try {
+                await sendTaskEmail({
+                    _id: task._id,
+                    taskName: task.taskName,
+                    empId: task.empId,
+                    deadline: task.deadline,
+                    priority: task.priority,
+                    description: task.description,
+                    status: task.status,
+                    assignedByName: req.user.name,
+                    assignedToEmail: task.assignedTo.email,
+                    assignedToName: task.assignedTo.name,
+                    isNewAssignment: isNewAssignment,
+                    isTaskEdit: !isNewAssignment,
+                    lastModifiedAt: task.lastModifiedAt
+                });
+                console.log(`✅ Email sent to ${task.assignedTo.email} for task: ${task.taskName}`);
+            } catch (emailError) {
+                console.warn(`⚠️ Email sending failed for task ${task._id}: ${emailError.message}`);
+            }
         }
         
         res.json({

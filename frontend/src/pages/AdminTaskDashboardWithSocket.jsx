@@ -40,8 +40,12 @@ export default function AdminTaskDashboardWithSocket() {
     const [editTaskData, setEditTaskData] = useState({
         taskName: "",
         assignedTo: "",
-        deadline: ""
+        deadline: "",
+        priority: "",
+        description: ""
     });
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingTaskId, setEditingTaskId] = useState(null);
     
     // Recording & Transcription states
     const [file, setFile] = useState(null);
@@ -189,6 +193,38 @@ export default function AdminTaskDashboardWithSocket() {
         }
     };
 
+    const handleEditTask = async () => {
+        if (!editingTaskId) return;
+        if (!editTaskData.taskName.trim()) {
+            alert("Task name is required");
+            return;
+        }
+
+        try {
+            const response = await api.patch(`/api/tasks/${editingTaskId}`, {
+                taskName: editTaskData.taskName,
+                deadline: editTaskData.deadline,
+                priority: editTaskData.priority,
+                description: editTaskData.description
+            });
+
+            alert("✅ Task updated successfully! Email sent to assigned user.");
+            setShowEditModal(false);
+            setEditingTaskId(null);
+            setEditTaskData({
+                taskName: "",
+                assignedTo: "",
+                deadline: "",
+                priority: "",
+                description: ""
+            });
+            fetchDashboardData();
+        } catch (err) {
+            alert(err.response?.data?.error || "Error updating task");
+            console.error("Edit task error:", err);
+        }
+    };
+
     // Recording functions
     const startRecording = async () => {
         try {
@@ -232,6 +268,11 @@ export default function AdminTaskDashboardWithSocket() {
             
             const formData = new FormData();
             formData.append("audio", file);
+            
+            // Generate unique meeting ID for each upload
+            const meetingId = `meeting_${Date.now()}_${Math.random().toString(36).substr(2, 16)}`;
+            formData.append("meetingId", meetingId);
+            console.log(`[Frontend] Uploading with meetingId: ${meetingId}`);
 
             // Call backend which calls AI service
             const res = await api.post("/upload", formData, {
@@ -277,30 +318,132 @@ export default function AdminTaskDashboardWithSocket() {
 
     const exportToPDF = () => {
         const doc = new jsPDF();
-        doc.text("Meeting Tasks Summary", 14, 15);
-        
+        doc.text("All Meetings Summary Report", 14, 15);
+
         let yOffset = 25;
-        
-        if (summary) {
-            doc.setFontSize(11);
-            doc.text("Meeting Summary:", 14, yOffset);
+
+        // Add overall summary
+        doc.setFontSize(11);
+        doc.text("Overall Statistics:", 14, yOffset);
+        yOffset += 7;
+        doc.setFontSize(10);
+        doc.text(`Total Meetings: ${totalMeetings}`, 14, yOffset);
+        yOffset += 5;
+        doc.text(`Total Tasks: ${tasks.length}`, 14, yOffset);
+        yOffset += 5;
+        doc.text(`Completed Tasks: ${completedTasks}`, 14, yOffset);
+        yOffset += 5;
+        doc.text(`Pending Tasks: ${pendingTasks}`, 14, yOffset);
+        yOffset += 5;
+        doc.text(`High Priority Tasks: ${highPriorityTasks}`, 14, yOffset);
+        yOffset += 5;
+        doc.text(`Meetings with Conflicts: ${meetingsWithConflicts}`, 14, yOffset);
+        yOffset += 10;
+
+        // Get all meeting groups
+        const meetingGroups = groupTasksByMeeting(tasks);
+
+        // Add each meeting section
+        meetingGroups.forEach((group, idx) => {
+            if (yOffset > 250) { // Add new page if needed
+                doc.addPage();
+                yOffset = 20;
+            }
+
+            // Meeting header
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.text(`${group.label}`, 14, yOffset);
             yOffset += 7;
+
             doc.setFontSize(10);
-            const splitSummary = doc.splitTextToSize(summary, 180);
-            doc.text(splitSummary, 14, yOffset);
-            yOffset += (splitSummary.length * 5) + 5;
+            doc.setFont("helvetica", "normal");
+            doc.text(`Meeting ID: ${group.meetingId || group.recordingId || 'N/A'}`, 14, yOffset);
+            yOffset += 5;
+            doc.text(`Tasks: ${group.tasks.length}`, 14, yOffset);
+            yOffset += 5;
+            if (group.hasConflicts) {
+                doc.setTextColor(255, 0, 0);
+                doc.text(`⚠️ Conflicts: ${group.conflictCount} unresolved`, 14, yOffset);
+                doc.setTextColor(0, 0, 0);
+            } else {
+                doc.setTextColor(0, 128, 0);
+                doc.text(`✅ No conflicts - Ready for PDF export`, 14, yOffset);
+                doc.setTextColor(0, 0, 0);
+            }
+            yOffset += 10;
+
+            // Tasks table for this meeting
+            const tableColumn = ["Task", "Assigned To", "Deadline", "Priority", "Status"];
+            const tableRows = [];
+
+            group.tasks.forEach(task => {
+                const taskData = [
+                    task.taskName || task.task || "Untitled",
+                    task.assignedTo?.name || task.assignedToName || "Unassigned",
+                    !isNaN(new Date(task.deadline).getTime()) ? new Date(task.deadline).toLocaleDateString() : task.deadline || "-",
+                    task.priority || "-",
+                    task.status || "pending"
+                ];
+                tableRows.push(taskData);
+            });
+
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: yOffset,
+                styles: { fontSize: 9, cellPadding: 2 },
+                headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+                alternateRowStyles: { fillColor: [243, 244, 246] },
+                margin: { left: 14, right: 14 }
+            });
+
+            yOffset = doc.lastAutoTable.finalY + 15;
+        });
+
+        // Add generation timestamp
+        doc.setFontSize(8);
+        doc.setTextColor(128, 128, 128);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 280);
+
+        doc.save("all_meetings_summary_report.pdf");
+    };
+
+    const exportMeetingToPDF = (meetingGroup) => {
+        // Check if meeting has conflicts - don't allow export
+        if (meetingGroup.hasConflicts) {
+            alert(`Cannot export PDF for ${meetingGroup.label} - ${meetingGroup.conflictCount} conflict(s) must be resolved first.`);
+            return;
         }
-        
+
+        const doc = new jsPDF();
+        doc.text(`${meetingGroup.label} - Tasks Summary`, 14, 15);
+
+        let yOffset = 25;
+
+        // Add meeting info
+        doc.setFontSize(10);
+        doc.text(`Meeting ID: ${meetingGroup.meetingId || meetingGroup.recordingId || 'N/A'}`, 14, yOffset);
+        yOffset += 7;
+        doc.text(`Total Tasks: ${meetingGroup.tasks.length}`, 14, yOffset);
+        yOffset += 7;
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, yOffset);
+        yOffset += 7;
+        doc.setTextColor(0, 128, 0);
+        doc.text(`✅ All conflicts resolved - PDF ready`, 14, yOffset);
+        doc.setTextColor(0, 0, 0);
+        yOffset += 10;
+
         const tableColumn = ["Task", "Assigned To", "Deadline", "Priority", "Status"];
         const tableRows = [];
 
-        tasks.forEach(task => {
+        meetingGroup.tasks.forEach(task => {
             const taskData = [
-                task.taskName,
-                task.assignedTo?.name || "Unassigned",
+                task.taskName || task.task || "Untitled",
+                task.assignedTo?.name || task.assignedToName || "Unassigned",
                 !isNaN(new Date(task.deadline).getTime()) ? new Date(task.deadline).toLocaleDateString() : task.deadline || "-",
                 task.priority || "-",
-                task.status
+                task.status || "pending"
             ];
             tableRows.push(taskData);
         });
@@ -314,7 +457,7 @@ export default function AdminTaskDashboardWithSocket() {
             alternateRowStyles: { fillColor: [243, 244, 246] }
         });
 
-        doc.save("admin_tasks_summary.pdf");
+        doc.save(`${meetingGroup.label.toLowerCase().replace(' ', '_')}_tasks_summary.pdf`);
     };
 
     const handleLogout = () => {
@@ -323,17 +466,44 @@ export default function AdminTaskDashboardWithSocket() {
         navigate("/login");
     };
 
-    // Group tasks by meeting/recording
+    // Group tasks by meeting/recording with sequential numbering
     const groupTasksByMeeting = (data) => {
-        const grouped = {};
+        const grouped = new Map();
+
         data.forEach(task => {
-            const meetingKey = task.meetingId || task.recordingId || "direct-task";
-            if (!grouped[meetingKey]) {
-                grouped[meetingKey] = [];
+            const meetingKey = task.meetingId ? `meeting_${task.meetingId}` : task.recordingId ? `recording_${task.recordingId}` : "direct-task";
+
+            if (!grouped.has(meetingKey)) {
+                grouped.set(meetingKey, {
+                    key: meetingKey,
+                    meetingId: task.meetingId || "",
+                    recordingId: task.recordingId || "",
+                    tasks: []
+                });
             }
-            grouped[meetingKey].push(task);
+
+            grouped.get(meetingKey).tasks.push(task);
         });
-        return grouped;
+
+        // Convert to array and sort by meeting ID (which contains timestamp), then assign sequential numbers
+        const sortedGroups = Array.from(grouped.values()).sort((a, b) => {
+            // Extract timestamp from meetingId (format: meeting_timestamp_random)
+            const aTimestamp = a.meetingId ? parseInt(a.meetingId.split('_')[1]) || 0 : 0;
+            const bTimestamp = b.meetingId ? parseInt(b.meetingId.split('_')[1]) || 0 : 0;
+            return bTimestamp - aTimestamp; // Newest first
+        });
+
+        // Assign sequential meeting numbers and check for conflicts
+        return sortedGroups.map((group, idx) => ({
+            ...group,
+            label: `Meeting ${idx + 1}`,
+            hasConflicts: group.tasks.some(task =>
+                task.inconsistencies?.filter(i => !i.resolved).length > 0
+            ),
+            conflictCount: group.tasks.reduce((count, task) =>
+                count + (task.inconsistencies?.filter(i => !i.resolved).length || 0), 0
+            )
+        }));
     };
 
     const getFilteredData = () => {
@@ -361,6 +531,8 @@ export default function AdminTaskDashboardWithSocket() {
     const pendingTasks = tasks.filter(t => t.status === "pending").length;
     const completedTasks = tasks.filter(t => t.status === "completed").length;
     const highPriorityTasks = tasks.filter(t => t.priority === "High").length;
+    const meetingsWithConflicts = groupTasksByMeeting(tasks).filter(group => group.hasConflicts).length;
+    const totalMeetings = groupTasksByMeeting(tasks).length;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
@@ -387,7 +559,7 @@ export default function AdminTaskDashboardWithSocket() {
                 </nav>
 
                 {/* SUMMARY STATS */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
                     <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
                         <p className="text-gray-500 text-sm">Total Tasks</p>
                         <p className="text-2xl font-bold text-gray-900">{tasks.length}</p>
@@ -405,8 +577,12 @@ export default function AdminTaskDashboardWithSocket() {
                         <p className="text-2xl font-bold text-red-600">{highPriorityTasks}</p>
                     </div>
                     <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
-                        <p className="text-gray-500 text-sm">With Conflicts</p>
-                        <p className="text-2xl font-bold text-purple-600">{conflicts.filter(t => t.inconsistencies?.filter(i => !i.resolved).length > 0).length}</p>
+                        <p className="text-gray-500 text-sm">Meetings with Conflicts</p>
+                        <p className="text-2xl font-bold text-purple-600">{meetingsWithConflicts}/{totalMeetings}</p>
+                    </div>
+                    <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+                        <p className="text-gray-500 text-sm">Total Meetings</p>
+                        <p className="text-2xl font-bold text-orange-600">{totalMeetings}</p>
                     </div>
                 </div>
 
@@ -458,7 +634,7 @@ export default function AdminTaskDashboardWithSocket() {
                                 onClick={exportToPDF}
                                 className="flex items-center gap-2 bg-blue-600 px-3 py-1.5 rounded text-white font-semibold hover:bg-blue-700 transition text-xs"
                             >
-                                <Download size={14} /> Export
+                                <Download size={14} /> Export All Meetings PDF
                             </button>
                         </div>
                         {summary ? (
@@ -531,25 +707,49 @@ export default function AdminTaskDashboardWithSocket() {
                             <p className="text-gray-500">No tasks to display</p>
                         </div>
                     ) : (
-                        Object.entries(groupTasksByMeeting(filteredData)).map(([meetingKey, meetingTasks], idx) => (
-                            <div key={meetingKey} className="space-y-3">
+                        groupTasksByMeeting(filteredData).map((group, idx) => (
+                            <div key={group.key} className="space-y-3">
                                 {/* Meeting Separator */}
                                 <div className="flex items-center gap-4 py-4">
                                     <div className="flex-1 h-1 bg-gradient-to-r from-blue-400 to-purple-400"></div>
-                                    <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <p className="text-sm font-bold text-blue-900">
-                                            🎤 Meeting {idx + 1}
-                                        </p>
-                                        <p className="text-xs text-blue-700">
-                                            {meetingTasks.length} task{meetingTasks.length !== 1 ? 's' : ''}
-                                        </p>
+                                    <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg flex-1">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <p className="text-sm font-bold text-blue-900">
+                                                    🎤 {group.label}
+                                                </p>
+                                                <p className="text-xs text-blue-700">
+                                                    {group.tasks.length} task{group.tasks.length !== 1 ? 's' : ''}
+                                                </p>
+                                                {group.hasConflicts && (
+                                                    <p className="text-xs text-red-600 font-semibold mt-1">
+                                                        ⚠️ {group.conflictCount} conflict{group.conflictCount !== 1 ? 's' : ''} to resolve
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {!group.hasConflicts && (
+                                                    <button
+                                                        onClick={() => exportMeetingToPDF(group)}
+                                                        className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition"
+                                                    >
+                                                        <Download size={14} /> Export PDF
+                                                    </button>
+                                                )}
+                                                {group.hasConflicts && (
+                                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-300 text-gray-600 rounded text-xs">
+                                                        <AlertTriangle size={14} /> PDF Blocked
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="flex-1 h-1 bg-gradient-to-r from-purple-400 to-blue-400"></div>
                                 </div>
                                 
                                 {/* Tasks for this meeting */}
                                 <div className="space-y-3">
-                                    {meetingTasks.map(task => (
+                                    {group.tasks.map(task => (
                                         <div
                                             key={task._id}
                                             className="bg-white rounded-lg shadow-md border-l-4 border-blue-500 hover:shadow-lg transition-shadow"
@@ -656,6 +856,24 @@ export default function AdminTaskDashboardWithSocket() {
                                                             <CheckCircle size={16} /> Resolve & Approve
                                                         </button>
                                                     )}
+                                                    {task.assignmentStatus === "assigned" && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingTaskId(task._id);
+                                                                setEditTaskData({
+                                                                    taskName: task.taskName || task.task,
+                                                                    assignedTo: task.assignedTo?._id || "",
+                                                                    deadline: task.deadline || "",
+                                                                    priority: task.priority || "Medium",
+                                                                    description: task.description || ""
+                                                                });
+                                                                setShowEditModal(true);
+                                                            }}
+                                                            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                                                        >
+                                                            <FileText size={16} /> Edit Task
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => deleteTask(task._id)}
                                                         className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
@@ -683,6 +901,104 @@ export default function AdminTaskDashboardWithSocket() {
                 </div>
                 </div>
             </div>
+
+            {/* Edit Task Modal (for assigned tasks) */}
+            {showEditModal && editingTaskId && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
+                        <div className="sticky top-0 bg-blue-50 border-b p-6">
+                            <h2 className="text-2xl font-bold text-gray-900">Edit Task</h2>
+                            <p className="text-gray-600 text-sm mt-1">Update task details and notify the assigned user</p>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            {/* Task Name */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Task Name</label>
+                                <input
+                                    type="text"
+                                    value={editTaskData.taskName}
+                                    onChange={(e) =>
+                                        setEditTaskData({ ...editTaskData, taskName: e.target.value })
+                                    }
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                                    placeholder="Enter task name"
+                                />
+                            </div>
+
+                            {/* Deadline */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
+                                <input
+                                    type="text"
+                                    value={editTaskData.deadline}
+                                    onChange={(e) =>
+                                        setEditTaskData({ ...editTaskData, deadline: e.target.value })
+                                    }
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                                    placeholder="e.g. tomorrow, YYYY-MM-DD"
+                                />
+                            </div>
+
+                            {/* Priority */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                                <select
+                                    value={editTaskData.priority}
+                                    onChange={(e) =>
+                                        setEditTaskData({ ...editTaskData, priority: e.target.value })
+                                    }
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                                >
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                </select>
+                            </div>
+
+                            {/* Description */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                                <textarea
+                                    value={editTaskData.description}
+                                    onChange={(e) =>
+                                        setEditTaskData({ ...editTaskData, description: e.target.value })
+                                    }
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                                    placeholder="Add task description (optional)"
+                                    rows="3"
+                                />
+                            </div>
+
+                            {/* Assigned Employee (Display Only) */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Assigned To</label>
+                                <p className="px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900">
+                                    {employees.find(e => e._id === editTaskData.assignedTo)?.name || "Unknown"}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="sticky bottom-0 bg-gray-50 border-t p-6 flex gap-3 justify-end">
+                            <button
+                                onClick={() => {
+                                    setShowEditModal(false);
+                                    setEditingTaskId(null);
+                                }}
+                                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-100 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleEditTask()}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
+                            >
+                                Save & Notify User
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Conflict Resolution Modal */}
             {selectedTask && selectedTask.inconsistencies?.filter(i => !i.resolved).length > 0 && (

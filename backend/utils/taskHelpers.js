@@ -4,7 +4,39 @@ const escapeRegExp = (text) => {
     return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
-const parseDeadline = (deadlineText) => {
+const findUserByPersonOrEmpId = async (nameOrId) => {
+    if (!nameOrId || typeof nameOrId !== "string") {
+        return null;
+    }
+
+    const cleaned = nameOrId.trim().replace(/[:,]$/, "");
+    if (!cleaned) {
+        return null;
+    }
+
+    const isEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleaned);
+    const idQuery = /^[0-9a-fA-F]{24}$/.test(cleaned) ? { _id: cleaned } : null;
+    const regex = new RegExp(`^${escapeRegExp(cleaned)}(?:\\s|$)`, "i");
+
+    const query = {
+        $or: [
+            { name: regex },
+            { employeeId: cleaned }
+        ]
+    };
+
+    if (isEmail) {
+        query.$or.push({ email: cleaned.toLowerCase() });
+    }
+
+    if (idQuery) {
+        query.$or.push(idQuery);
+    }
+
+    return await User.findOne(query);
+};
+
+export const parseDeadline = (deadlineText) => {
     if (!deadlineText || typeof deadlineText !== "string") {
         return null;
     }
@@ -42,38 +74,6 @@ const parseDeadline = (deadlineText) => {
     }
 
     return null;
-};
-
-const findUserByPersonOrEmpId = async (nameOrId) => {
-    if (!nameOrId || typeof nameOrId !== "string") {
-        return null;
-    }
-
-    const cleaned = nameOrId.trim().replace(/[:,]$/, "");
-    if (!cleaned) {
-        return null;
-    }
-
-    const isEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleaned);
-    const idQuery = /^[0-9a-fA-F]{24}$/.test(cleaned) ? { _id: cleaned } : null;
-    const regex = new RegExp(`^${escapeRegExp(cleaned)}(?:\\s|$)`, "i");
-
-    const query = {
-        $or: [
-            { name: regex },
-            { employeeId: cleaned }
-        ]
-    };
-
-    if (isEmail) {
-        query.$or.push({ email: cleaned.toLowerCase() });
-    }
-
-    if (idQuery) {
-        query.$or.push(idQuery);
-    }
-
-    return await User.findOne(query);
 };
 
 export const normalizeExtractedTask = async (taskData, uploaderId) => {

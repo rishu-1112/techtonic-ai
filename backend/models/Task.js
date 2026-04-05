@@ -133,7 +133,18 @@ const taskSchema = new mongoose.Schema({
     deletedAt: Date,
     
     deletedBy: mongoose.Schema.Types.ObjectId,
-    
+
+    reminderSent: {
+        oneHour: {
+            type: Boolean,
+            default: false
+        },
+        oneDay: {
+            type: Boolean,
+            default: false
+        }
+    }
+
 }, { timestamps: true });
 
 // Index for efficient empid-based queries

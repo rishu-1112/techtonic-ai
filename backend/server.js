@@ -108,6 +108,7 @@ app.get("/api/meetings/:roomId", async (req, res) => {
     }
 });
 
+// Use configured multer upload instance
 app.post("/upload", requireAuth, upload.single("audio"), async (req, res) => {
     try {
         if (!req.file) {
@@ -115,6 +116,7 @@ app.post("/upload", requireAuth, upload.single("audio"), async (req, res) => {
         }
 
         const meetingId = req.body.meetingId;
+        console.log(`[Upload] Received meetingId: ${meetingId}`);
         const filePath = req.file.path;
         const formData = new FormData();
         formData.append("file", fs.createReadStream(filePath));
