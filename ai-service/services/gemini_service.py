@@ -65,7 +65,7 @@ def extract_tasks_with_gemini(text, user_list=[]):
             #print(api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             prompt = f"""
-You are an advanced AI meeting assistant fluent in English and Hindi (हिंदी).
+You are an advanced AI meeting assistant fluent in English and Hindi (हिंदी) and act as precise data extraction assistant.
 
 Your task is to extract ALL actionable tasks with HIGH accuracy from meeting transcripts in ANY language.
 
@@ -92,6 +92,7 @@ CRITICAL RULES:
    - Extract ONLY actionable tasks.
    - Break multiple instructions into separate tasks.
    - Support Hindi task descriptions: e.g., "रिपोर्ट तैयार करें", "मीटिंग शेड्यूल करें"
+   - Remove things like "please", "kindly", "you should", "i need you to", etc. Focus on the core action.
 
 5. DEADLINES:
    - Associate deadlines with correct tasks.
